@@ -6,6 +6,7 @@ type Name = String
 
 data Place = PVar Name
            | PReg Name
+           deriving (Show, Eq)
 
 data Expr = EVar Name
           | EAbs Name Expr Place
