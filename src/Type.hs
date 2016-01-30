@@ -14,13 +14,15 @@ data Effect = AEGet Place -- get(ρ)
             | AEVar Name -- effect variable ε
             deriving (Show, Ord, Eq)
 
+newtype EVar = EVar { unEVar :: Name } deriving (Eq, Ord, Show)
+
 type Effects = S.Set Effect
 
 emptyEffects :: Effects
 emptyEffects = S.empty
 
 data Type = TInt
-          | TArrow DecoratedType (Name, Effects) DecoratedType -- μ---ε.φ-->μ
+          | TArrow DecoratedType (EVar, Effects) DecoratedType -- μ---ε.φ-->μ
           | TVar Name -- α
           deriving (Show, Eq)
 

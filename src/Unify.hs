@@ -12,7 +12,7 @@ import Common
 data Substitution = Substitution {
   _placeSubst  :: M.Map Name Place
 , _typeSubst   :: M.Map Name Type
-, _effectSubst :: M.Map Name (Name, Effects)
+, _effectSubst :: M.Map EVar (EVar, Effects)
 }
 
 makeLenses ''Substitution
@@ -35,12 +35,16 @@ instance Unify Type where
                                   M.insert evar' (evar, effs'')) $ s)
     unify _ _        = Nothing
 
-
 instance Unify Place where
     unify (PVar x) p = Just $ emptySubst { _placeSubst = M.singleton x p }
     unify p (PVar x) = Just $ emptySubst { _placeSubst = M.singleton x p }
     unify (PReg r1) (PReg r2) | r1 == r2 = Just emptySubst
     unify _ _ = Nothing
+
+instance Unify DecoratedType where
+    unify (ty, p) (ty', p') = do
+        s <- unify ty ty'
+        flip unionSubst s <$> unify (p `substIn` s) p'
 
 
 unionSubst :: Substitution -> Substitution -> Substitution
@@ -58,6 +62,8 @@ instance Subst Type Type where
 instance Subst Place Place where
     substIn = undefined
 
-instance Subst Name (Name, Effects) where
+instance Subst EVar (EVar, Effects) where
     substIn = undefined
 
+instance Subst DecoratedType DecoratedType where
+    substIn (ty, p) s = (ty `substIn` s, p `substIn` s)
