@@ -16,7 +16,7 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Source, Target, Translate, Common, Type
+  exposed-modules:     Source, Target, Translate, Common, Type, Unify
   -- other-modules:       
   default-extensions:  FlexibleContexts
   build-depends:       base >=4.8 && <4.9, containers >=0.5 && <0.6, mtl, lens
