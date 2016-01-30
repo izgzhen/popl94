@@ -56,11 +56,13 @@ translate e@(S.EApp expr1 expr2) = do
 
 -- (T-ABS)
 translate (S.EAbs x expr) = do
-    decTy1 <- (,) <$> newTyVar <*> newPlaceVar
-    (expr', decTy2, effs, subst) <- withDecTy x decTy1 $ translate expr
+    decTy1@(STy ty1, p1) <- (,) <$> (STy <$> newTyVar) <*> newPlaceVar
+    (expr', decTy2, effs, subst) <- withSimpleType x decTy1 $ translate expr
     evar <- newEffVar
     p <- newPlaceVar
-    return ( T.EAbs x expr' p, (TArrow (decTy1 `substIn` subst) (evar, effs) decTy2, p)
+    return ( T.EAbs x expr' p, (TArrow (ty1 `substIn` subst, p1 `substIn` subst)
+                                       (evar, effs) decTy2
+                               , p)
            , S.singleton (AEPut p), subst)
 
 -- (T-LET)
@@ -95,10 +97,6 @@ translate' expr = do
 
 -- -- Utils
 
-isInstanceOf :: Type -> CompoundTS -> Maybe Substitution
-isInstanceOf = undefined
-
-
 lookupSimple :: Name -> TE (SimpleTS, Place)
 lookupSimple = undefined
 
@@ -119,13 +117,6 @@ withCompoundType = undefined
 
 withSimpleType :: Name -> (SimpleTS, Place) -> TE a -> TE a
 withSimpleType = undefined
-
-withDecTy :: Name -> DecoratedType -> TE a -> TE a
-withDecTy = undefined
-
-getSubst :: (Canonicalizable a, MonadError String m) =>
-            a -> m (Type, Substitution)
-getSubst = undefined
 
 instSimple :: SimpleTS -> m (Type, Substitution)
 instSimple = undefined
