@@ -13,7 +13,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Set (union)
+import Data.Set (union, intersection)
 
 data TEState = TEState {
   _typeOf   :: M.Map Name (Either SimpleTS CompoundTS, Place)
@@ -23,7 +23,7 @@ type TE = ExceptT String (State TEState)
 
 data Substitution = Substitution {
   _placeSubst  :: M.Map Name Place
-, _typeSubst   :: M.Map Name Type
+, _typeSubst   :: M.Map Name CanonType
 , _effectSubst :: M.Map Name (Name, Effects)
 }
 
@@ -36,7 +36,7 @@ emptySubst = undefined
 class Subst a b where
     substIn :: MonadError String m => a -> Substitution -> m b
 
-instance Subst Type Type where
+instance Subst Type CanonType where
     substIn = undefined
 
 instance Subst Place Place where
@@ -48,6 +48,7 @@ instance Subst Name (Name, Effects) where
 -- TE ⊢ e ⇒ e′ : μ, ϕ
 -- in TE, e translates to e′, which has type and place μ and effect ϕ
 
+-- Rule 14: Polymorphic variables
 translate :: S.Expr -> TE (T.Expr, DecoratedType, Effects, Substitution)
 translate (S.EVar x) = do
     (sty, p) <- lookupSimple x
@@ -55,21 +56,23 @@ translate (S.EVar x) = do
     ts <- sequence $ replicate (length _tvars) newTyVar
     es <- sequence $ replicate (length _evars) newEffVar
     let subst = Substitution M.empty
-                             (M.fromList $ zip _tvars ts)
+                             (M.fromList $ zip _tvars $ map (\t -> CanonType [] [] [] t) ts)
                              (M.fromList $ zip _evars (map (\e -> (e, emptyEffects)) es))
     return (T.EVar x, (_innerty, p), emptyEffects, subst)
 
+-- Rule 15
 translate (S.EAbs x expr) = do
-    ty1 <- newTyVar
+    ty1 <- newTyVar     -- Concrete type, no polymorphism
     p1 <- newPlaceVar
     (expr', decTy2, eff, subst) <- withCompoundType x (CTy ty1, p1) $ translate expr
-    ty1' <- ty1 `substIn` subst
+    CanonType [] [] [] ty1' <- ty1 `substIn` subst
     p1' <- p1 `substIn` subst
     let decTy1 = (ty1', p1')
     evar <- newEffVar
     p <- newPlaceVar
     return (T.EAbs x expr' p, (TArrow decTy1 (evar, eff) decTy2, p), S.singleton (AEPut p), subst)
 
+-- Rule 16
 translate e@(S.EApp expr1 expr2) = do
     (expr1', (ty1, p), eff1, subst1) <- translate expr1
     (expr2', decTy2,   eff2, subst2) <- translate expr2
@@ -80,20 +83,23 @@ translate e@(S.EApp expr1 expr2) = do
                 return (T.EApp expr1' expr2', decTy, eff, subst1 `unionSubst` subst2)
         _ -> throwError $ "can't type " ++ show e
 
+-- Rule 17
 translate (S.ELet x expr1 expr2) = do
     (expr1', (ty1, p1), eff1, subst1) <- translate expr1
     tyx <- newTyVar
     (expr2', decTy, eff2, subst2) <- withSimpleType x (STy tyx, p1) $ translate expr2
     return (T.ELet x expr1' expr2', decTy, eff1 `S.union` eff2, subst1 `unionSubst` subst2)
 
+-- Rule 18: f can be used region-polymorphically, but not
+--          type-polymorphically
 translate (S.ELetrec f x expr1 expr2) = do
     ty <- newTyVar
     p <- newPlaceVar
     (T.EAbs x expr1' p', (_, p), eff1, subst1)
         <- withCompoundType f (CTy ty, p)
             $ translate (S.EAbs x expr1)
+    c1 <- ty `substIn` subst1
     when (p /= p') $ throwError "p' /= p"
-    c1 <- undefined
     ty' <- newTyVar
     (expr2', decTy, eff2, subst2)
         <- withCompoundType f (CTy ty', p) $ translate expr2
@@ -102,6 +108,7 @@ translate (S.ELetrec f x expr1 expr2) = do
              , eff1 `union` eff2
              , subst1 `unionSubst` subst2 )
 
+-- Rule 19
 translate (S.EFun f) = do
     (cts, p') <- lookupCompound f
     let c = toCanonType cts
@@ -111,6 +118,7 @@ translate (S.EFun f) = do
     ps <- mapM (flip substIn subst) (map PVar $ _pvars c)
     return (T.EFun f ps p, (ty, p), eff, subst)
 
+-- Rule 20
 translate' :: S.Expr -> TE (T.Expr, DecoratedType, Effects, Substitution)
 translate' expr = do
     (expr', decTy, eff, subst) <- translate expr
@@ -150,10 +158,27 @@ getSubst :: (Canonicalizable a, MonadError String m) =>
 getSubst = undefined
 
 
-observe :: DecoratedType -> Effects -> m Effects
-observe = undefined
+observe :: Fv a => a -> Effects -> TE Effects
+observe a effects = return $
+    S.fromList [ AEPut (PVar p) | p <- frv a ] `union`
+    S.fromList [ AEGet (PVar p) | p <- frv a ] `union`
+    S.fromList [ AEVar x | x <- fev a ] `intersection`
+    effects
+
+class Fv a where
+    -- Free region variables
+    frv :: a -> [Name]
+
+    -- Free effect variables
+    fev :: a -> [Name]
+
+instance Fv Effects where
+    frv = undefined
+    fev = undefined
+
+instance Fv DecoratedType where
+    frv = undefined
+    fev = undefined
 
 
-frv :: Effects -> [Name]
-frv = undefined
 
