@@ -1,6 +1,7 @@
 -- Translate from the source language to target lambda calculus
 {-# LANGUAGE RecordWildCards, TypeSynonymInstances,
-             FlexibleInstances, TemplateHaskell #-}
+             FlexibleInstances, TemplateHaskell,
+             UndecidableInstances #-}
 
 module Translate where
 
@@ -77,8 +78,8 @@ translate (S.EAbs x expr) = do
 translate (S.ELet x expr1 expr2) = do
     (expr1', (ty1, p1), eff1, subst1) <- translate expr1
     refineEnv subst1
-    ty1' <- tyClosure subst1 ty1
-    (expr2', decTy, eff2, subst2) <- withSimpleType x (STy ty1', p1) $ translate expr2
+    ty1' <- tyClosureSimple subst1 ty1
+    (expr2', decTy, eff2, subst2) <- withSimpleType x (ty1', p1) $ translate expr2
     return ( T.ELet x expr1' expr2', decTy
            , eff1 `union` eff2, subst2 `unionSubst` subst1)
 
@@ -90,9 +91,9 @@ translate (S.ELetrec f x expr1 expr2) = do
         <- withCompoundType f (CTy ty, p) $ translate (S.EAbs x expr1)
     let ps = S.toList $ frv (ty `substIn` subst1 :: Type)
     refineEnv subst1
-    ty'' <- tyClosure subst1 ty'
+    ty'' <- tyClosureCompound subst1 ty'
     (expr2', decTy, eff2, subst2)
-        <- withCompoundType f (CTy ty'', p') $ translate expr2
+        <- withCompoundType f (ty'', p') $ translate expr2
     return ( T.ELetrec f ps x p' expr1' expr2', decTy
            , eff1 `union` eff2, subst2 `unionSubst` subst1)
 
@@ -188,15 +189,20 @@ class Fv a where
     -- Free region variables
     frv :: a -> S.Set Name
 
+    -- Free type variables
+    ftv :: a -> S.Set Name
+
     -- Free effect variables
     fev :: a -> S.Set Name
 
 instance Fv a => Fv (S.Set a) where
     frv = S.unions . map frv . S.toList
+    ftv = S.unions . map ftv . S.toList
     fev = S.unions . map fev . S.toList
 
 instance (Fv a, Fv b) => Fv (a, b) where
     frv (a, b) = frv a `S.union` frv b
+    ftv (a, b) = ftv a `S.union` ftv b
     fev (a, b) = fev a `S.union` fev b
 
 instance Fv Effect where
@@ -204,17 +210,20 @@ instance Fv Effect where
     frv (AEPut (PVar x)) = S.singleton x
     frv _ = S.empty
 
+    ftv _ = S.empty
+
     fev (AEVar x) = S.singleton x
     fev _ = S.empty
 
 instance Fv EVar where
     frv _ = S.empty
+    ftv _ = S.empty
     fev (EVar x) = S.singleton x
 
 instance Fv Place where
     frv (PVar x) = S.singleton x
     frv _ = S.empty
-
+    ftv _ = S.empty
     fev _ = S.empty
 
 instance Fv Type where
@@ -224,12 +233,47 @@ instance Fv Type where
         frv decTy2
     frv _ = S.empty
 
+    ftv (TVar x) = S.singleton x
+    ftv (TArrow (ty1, _) _ (ty2, _)) = ftv ty1 `S.union` ftv ty2
+
     fev (TArrow decTy1 arrEff decTy2) =
         fev decTy1 `S.union`
         fev arrEff `S.union`
         fev decTy2
     fev _ = S.empty
 
+instance Fv x => Fv (M.Map k x) where
+    frv m = S.unions . map frv $ M.elems m
+    fev m = S.unions . map fev $ M.elems m
+    ftv m = S.unions . map ftv $ M.elems m
+
+instance (Fv a, Fv b) => Fv (Either a b) where
+    frv (Left a)  = frv a
+    frv (Right b) = frv b
+    fev (Left a)  = fev a
+    fev (Right b) = fev b
+    ftv (Left a)  = ftv a
+    ftv (Right b) = ftv b
+
+instance Fv CompoundTS where
+    frv ts = let c = toCanonType ts
+             in  frv (_innerty c) S.\\ S.fromList (_pvars c)
+
+    ftv ts = let c = toCanonType ts
+             in  frv (_innerty c) S.\\ S.fromList (_tvars c)
+
+    fev ts = let c = toCanonType ts
+             in  frv (_innerty c) S.\\ S.fromList (_evars c)
+
+instance Fv SimpleTS where
+    ftv ts = let c = toCanonType ts
+             in  frv (_innerty c) S.\\ S.fromList (_tvars c)
+
+    fev ts = let c = toCanonType ts
+             in  frv (_innerty c) S.\\ S.fromList (_evars c)
+
+    frv ts = let c = toCanonType ts
+             in  frv (_innerty c) S.\\ S.fromList (_evars c)
 
 refineEnv :: Substitution -> TE ()
 refineEnv s = tyDict %= flip (foldr f) (M.toList $ _typeSubst s)
@@ -239,8 +283,30 @@ refineEnv s = tyDict %= flip (foldr f) (M.toList $ _typeSubst s)
                 (Right _, p) -> M.insert x (Right (CTy ty), p) dict
                 (Left  _, p) -> M.insert x (Left  (STy ty), p) dict
 
-tyClosure :: Substitution -> Type -> TE Type
-tyClosure subst ty = undefined
+tyClosureSimple :: Substitution -> Type -> TE SimpleTS
+tyClosureSimple subst ty = do
+    oldDict <- use tyDict
+    refineEnv subst
+    newDict <- use tyDict
+
+    let ts = S.toList $ ftv ty S.\\ ftv newDict
+    let es = S.toList $ fev ty S.\\ fev newDict
+
+    tyDict .= oldDict
+    return $ fromCanonType (CanonType [] ts es ty)
+
+tyClosureCompound :: Substitution -> Type -> TE CompoundTS
+tyClosureCompound subst ty = do
+    oldDict <- use tyDict
+    refineEnv subst
+    newDict <- use tyDict
+
+    let ps = S.toList $ frv ty S.\\ frv newDict
+    let ts = S.toList $ ftv ty S.\\ ftv newDict
+    let es = S.toList $ fev ty S.\\ fev newDict
+
+    tyDict .= oldDict
+    return $ fromCanonType (CanonType ps ts es ty)
 
 
 fromJust :: MonadError String m => Maybe a -> m a
