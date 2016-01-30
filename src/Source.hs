@@ -2,12 +2,12 @@
 
 module Source where
 
-data Expr = EVar  Name
-          | EVarF Name
+import Common
+
+data Expr = EVar Name
+          | EFun Name
           | EAbs Name Expr
           | EApp Expr Expr
           | ELet Name Expr Expr
           | ELetrec Name Name Expr Expr
           deriving (Show, Eq)
-
-type Name = String
