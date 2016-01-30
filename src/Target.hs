@@ -10,6 +10,6 @@ data Expr = EVar Name
           | EApp Expr Expr
           | ELet Name Expr Expr
           | ELetrec Name [Name] Name Place Expr Expr
-          | EAt  Name [Place] Place
+          | EFun Name [Place] Place
           | ELetReg Name Expr
           deriving (Show, Eq)

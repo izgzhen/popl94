@@ -9,10 +9,10 @@ import Control.Lens
 
 -- Types
 
-data Effect = AEGet Name -- get(ρ)
-            | AEPut Name -- put(ρ)
+data Effect = AEGet Place -- get(ρ)
+            | AEPut Place -- put(ρ)
             | AEVar Name -- effect variable ε
-            deriving (Show, Eq)
+            deriving (Show, Ord, Eq)
 
 type Effects = S.Set Effect
 
@@ -26,7 +26,7 @@ data Type = TInt
 
 data Place = PVar Name -- region variables
            | PReg Name -- region names
-           deriving (Show, Eq)
+           deriving (Show, Ord, Eq)
 
 type DecoratedType = (Type, Place)
 
@@ -63,4 +63,13 @@ instance Canonicalizable SimpleTS where
 
     fromCanonType (CanonType [] ts es ty) = foldr SForallTy (foldr SForallEff (STy ty) es) ts
     fromCanonType c = error $ "can't transform" ++ show c ++ "into SimpleTS"
+
+instance Canonicalizable CompoundTS where
+    toCanonType (CTy ty) = CanonType [] [] [] ty
+    toCanonType (CForallTy t sts)  = tvars %~ (t :) $ toCanonType sts
+    toCanonType (CForallEff e sts) = evars %~ (e :) $ toCanonType sts
+    toCanonType (CForallPlc p sts) = pvars %~ (p :) $ toCanonType sts
+
+    fromCanonType (CanonType [] ts es ty) = foldr CForallTy (foldr CForallEff (CTy ty) es) ts
+    fromCanonType c = error $ "can't transform" ++ show c ++ "into CompoundTS"
 
