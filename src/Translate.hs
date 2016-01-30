@@ -94,16 +94,18 @@ translate (S.ELet x expr1 expr2) = do
 --          type-polymorphically
 translate (S.ELetrec f x expr1 expr2) = do
     ty <- newTyVar
-    p <- newPlaceVar
-    (T.EAbs x expr1' p', (_, p), eff1, subst1)
-        <- withCompoundType f (CTy ty, p)
+    PVar px <- newPlaceVar
+    PVar pret <- newPlaceVar
+    let cty = CForallPlc px (CForallPlc pret (CTy ty))
+    (T.EAbs x expr1' px', (_, px), eff1, subst1)
+        <- withCompoundType f (cty, PVar pret)
             $ translate (S.EAbs x expr1)
     c1 <- ty `substIn` subst1
-    when (p /= p') $ throwError "p' /= p"
+    when (px /= px') $ throwError "px' /= px"
     ty' <- newTyVar
     (expr2', decTy, eff2, subst2)
-        <- withCompoundType f (CTy ty', p) $ translate expr2
-    return $ ( T.ELetrec f (_pvars c1) x p expr1' expr2'
+        <- withCompoundType f (CTy ty', px) $ translate expr2
+    return $ ( T.ELetrec f (_pvars c1) x px expr1' expr2'
              , decTy
              , eff1 `union` eff2
              , subst1 `unionSubst` subst2 )
