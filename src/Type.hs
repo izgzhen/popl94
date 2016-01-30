@@ -1,8 +1,11 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Type where
 
 import Common
 
 import qualified Data.Set as S
+import Control.Lens
 
 -- Types
 
@@ -11,11 +14,13 @@ data Effect = AEGet Name -- get(ρ)
             | AEVar Name -- effect variable ε
             deriving (Show, Eq)
 
-emptyEffects :: S.Set Effect
+type Effects = S.Set Effect
+
+emptyEffects :: Effects
 emptyEffects = S.empty
 
 data Type = TInt
-          | TArrow DecoratedType (Name, S.Set Effect) DecoratedType -- μ---ε.φ-->μ
+          | TArrow DecoratedType (Name, Effects) DecoratedType -- μ---ε.φ-->μ
           | TVar Name -- α
           deriving (Show, Eq)
 
@@ -37,3 +42,25 @@ data CompoundTS = CTy Type
                 | CForallEff Name CompoundTS
                 | CForallPlc Name CompoundTS
                 deriving (Show, Eq)
+
+data CanonType = CanonType {
+  _pvars   :: [Name]
+, _tvars   :: [Name]
+, _evars   :: [Name]
+, _innerty :: Type
+} deriving (Show, Eq)
+
+makeLenses ''CanonType
+
+class Canonicalizable ty where
+    toCanonType   :: ty -> CanonType
+    fromCanonType :: CanonType -> ty
+
+instance Canonicalizable SimpleTS where
+    toCanonType (STy ty) = CanonType [] [] [] ty
+    toCanonType (SForallTy t sts)  = tvars %~ (t :) $ toCanonType sts
+    toCanonType (SForallEff e sts) = evars %~ (e :) $ toCanonType sts
+
+    fromCanonType (CanonType [] ts es ty) = foldr SForallTy (foldr SForallEff (STy ty) es) ts
+    fromCanonType c = error $ "can't transform" ++ show c ++ "into SimpleTS"
+
