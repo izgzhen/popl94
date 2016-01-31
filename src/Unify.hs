@@ -48,22 +48,33 @@ instance Unify DecoratedType where
 
 
 unionSubst :: Substitution -> Substitution -> Substitution
-unionSubst = undefined
+unionSubst s2 s1 = Substitution (_placeSubst s2  `unionMap` _placeSubst s1)
+                                (_typeSubst s2   `unionMap` _typeSubst s1)
+                                (_effectSubst s2 `unionMap` _effectSubst s1)
+
+
+unionMap :: Ord k => M.Map k a -> M.Map k a -> M.Map k a
+unionMap a b = (b M.\\ a) `M.union` a
 
 emptySubst :: Substitution
-emptySubst = undefined
+emptySubst = Substitution M.empty M.empty M.empty
 
 class Subst a b where
     substIn :: a -> Substitution -> b
 
 instance Subst Type Type where
-    substIn = undefined
+    substIn (TVar x) subst = unsafeLookup x (_typeSubst subst)
+    substIn (TArrow decTy1 (evar, effs) decTy2) s =
+        let (evar', effs') = unsafeLookup evar (_effectSubst s)
+        in  TArrow (decTy1 `substIn` s)
+                   (evar', effs' `S.union` effs)
+                   (decTy2 `substIn` s)
 
 instance Subst Place Place where
-    substIn = undefined
+    substIn (PVar x) subst = unsafeLookup x (_placeSubst subst)
 
 instance Subst EVar (EVar, Effects) where
-    substIn = undefined
+    substIn evar s = unsafeLookup evar (_effectSubst s)
 
 instance Subst DecoratedType DecoratedType where
     substIn (ty, p) s = (ty `substIn` s, p `substIn` s)
