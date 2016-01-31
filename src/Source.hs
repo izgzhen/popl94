@@ -4,7 +4,8 @@ module Source where
 
 import Common
 
-data Expr = EVar Name
+data Expr = EInt Int
+          | EVar Name
           | EFun Name
           | EAbs Name Expr
           | EApp Expr Expr

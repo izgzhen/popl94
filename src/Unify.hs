@@ -13,7 +13,7 @@ data Substitution = Substitution {
   _placeSubst  :: M.Map Name Place
 , _typeSubst   :: M.Map Name Type
 , _effectSubst :: M.Map EVar (EVar, Effects)
-}
+} deriving (Show)
 
 makeLenses ''Substitution
 
@@ -63,7 +63,12 @@ class Subst a b where
     substIn :: a -> Substitution -> b
 
 instance Subst Type Type where
-    substIn (TVar x) subst = unsafeLookup x (_typeSubst subst)
+    substIn (TVar x) subst =
+        case M.lookup x (_typeSubst subst) of
+            Just t  -> t
+            Nothing -> TVar x
+    substIn TInt _ = TInt
+
     substIn (TArrow decTy1 (evar, effs) decTy2) s =
         let (evar', effs') = unsafeLookup evar (_effectSubst s)
         in  TArrow (decTy1 `substIn` s)
@@ -71,10 +76,24 @@ instance Subst Type Type where
                    (decTy2 `substIn` s)
 
 instance Subst Place Place where
-    substIn (PVar x) subst = unsafeLookup x (_placeSubst subst)
+    substIn (PVar x) subst =
+        case M.lookup x (_placeSubst subst) of
+            Just p  -> p
+            Nothing -> PVar x
 
 instance Subst EVar (EVar, Effects) where
     substIn evar s = unsafeLookup evar (_effectSubst s)
 
+instance Subst Effects Effects where
+    substIn effs s = S.unions $ map (flip substIn s) $ S.toList effs
+
+instance Subst Effect Effects where
+    substIn (AEGet p) s = S.singleton $ AEGet (p `substIn` s)
+    substIn (AEPut p) s = S.singleton $ AEPut (p `substIn` s)
+    substIn (AEVar x) s =
+        let (EVar x', effs) = EVar x `substIn` s
+        in  S.singleton (AEVar x) `S.union` effs
+
 instance Subst DecoratedType DecoratedType where
     substIn (ty, p) s = (ty `substIn` s, p `substIn` s)
+

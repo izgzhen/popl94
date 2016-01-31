@@ -1,7 +1,7 @@
 -- Translate from the source language to target lambda calculus
 {-# LANGUAGE RecordWildCards, TypeSynonymInstances,
              FlexibleInstances, TemplateHaskell,
-             UndecidableInstances #-}
+             UndecidableInstances, MultiParamTypeClasses #-}
 
 module Translate where
 
@@ -27,13 +27,30 @@ data TEState = TEState {
 
 makeLenses ''TEState
 
+initTEState :: TEState
+initTEState = TEState {
+  _tyDict     = M.empty
+, _tyCounter  = 0
+, _pCounter   = 0
+, _effCounter = 0
+}
+
 type TE = ExceptT String (State TEState)
+
+-- runTranslate :: S.Expr -> Either String T.Expr
+runTranslate expr = evalState (runExceptT (translate' expr))
 
 -- TE ⊢ e ⇒ e′ : μ, ϕ
 -- in TE, e translates to e′, which has type and place μ and effect ϕ
 
--- (T-VAR)
 translate :: S.Expr -> TE (T.Expr, DecoratedType, Effects, Substitution)
+
+-- (T-INT)
+translate (S.EInt i) = do
+    p <- newPlaceVar
+    return (T.EInt i p, (TInt, p), emptyEffects, emptySubst)
+
+-- (T-VAR)
 translate (S.EVar x) = do
     (sty, p) <- lookupSimple x
     (ty, subst) <- instSimple sty
@@ -59,7 +76,7 @@ translate e@(S.EApp expr1 expr2) = do
     p <- newPlaceVar
     subst <- fromJust $ unify decTy1 (TArrow decTy2 (evar, emptyEffects) decTy, p)
     let (evar', effs') = evar `substIn` subst :: (EVar, Effects)
-    let effs = eff1 `union` eff2 `union` effs' -- FIXME: Not 100% original
+    let effs = eff1 `union` eff2 `union` effs' `union` S.singleton (AEGet p) -- FIXME: Not 100% original
     return ( T.EApp expr1' expr2', decTy `substIn` subst, effs
            , subst `unionSubst` subst2 `unionSubst` subst1)
 
@@ -69,8 +86,8 @@ translate (S.EAbs x expr) = do
     (expr', decTy2, effs, subst) <- withSimpleType x decTy1 $ translate expr
     evar <- newEffVar
     p <- newPlaceVar
-    return ( T.EAbs x expr' p, (TArrow (ty1 `substIn` subst, p1 `substIn` subst)
-                                       (evar, effs) decTy2
+    return ( T.EAbs x expr' p, ( TArrow (ty1 `substIn` subst, p1 `substIn` subst)
+                                        (evar, effs) decTy2
                                , p)
            , S.singleton (AEPut p), subst)
 
@@ -100,9 +117,11 @@ translate (S.ELetrec f x expr1 expr2) = do
 translate' :: S.Expr -> TE (T.Expr, DecoratedType, Effects, Substitution)
 translate' expr = do
     (expr', decTy, eff, subst) <- translate expr
-    eff' <- observe decTy eff
-    let ps = frv (eff S.\\ eff')
-    return (foldr T.ELetReg expr' ps, decTy, eff', subst)
+    let decTy' = decTy `substIn` subst
+    let eff' = eff `substIn` subst
+    eff'' <- observe decTy' eff'
+    let ps = frv (eff' S.\\ eff'')
+    return (foldr T.ELetReg (expr' `substIn` subst) ps, decTy', eff'', subst)
 
 -- -- Utils
 
@@ -182,7 +201,7 @@ observe :: Fv a => a -> Effects -> TE Effects
 observe a effects = return $
     S.fromList [ AEPut (PVar p) | p <- S.toList $ frv a ] `union`
     S.fromList [ AEGet (PVar p) | p <- S.toList $ frv a ] `union`
-    S.fromList [ AEVar x | x <- S.toList $ fev a ] `intersection`
+    S.fromList [ AEVar x        | x <- S.toList $ fev a ] `intersection`
     effects
 
 class Fv a where
@@ -308,3 +327,16 @@ tyClosureCompound subst ty = do
     tyDict .= oldDict
     return $ fromCanonType (CanonType ps ts es ty)
 
+
+instance Subst T.Expr T.Expr where
+    substIn (T.EInt i p) s        = T.EInt i (p `substIn` s)
+    substIn (T.EVar x) _          = T.EVar x
+    substIn (T.EAbs x e p) s      = T.EAbs x (e `substIn` s) (p `substIn` s)
+    substIn (T.EApp e1 e2) s      = T.EApp (e1 `substIn` s) (e2 `substIn` s)
+    substIn (T.ELet x e1 e2) s    = T.ELet x (e1 `substIn` s) (e2 `substIn` s)
+    substIn (T.ELetrec f ps x p e1 e2) s =
+        T.ELetrec f (map (\(PVar p) -> p) $ map (\p -> (PVar p) `substIn` s) ps)
+                x (p `substIn` s) (e1 `substIn` s) (e2 `substIn` s)
+    substIn (T.EFun f ps p) s     =
+        T.EFun f (map (flip substIn s) ps) (p `substIn` s)
+    substIn (T.ELetReg x e) s     = T.ELetReg x (e `substIn` s)
