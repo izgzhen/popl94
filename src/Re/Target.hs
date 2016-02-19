@@ -20,9 +20,9 @@ data Type = TInt
           | TArrow AnnTy ArrEff AnnTy
           deriving (Show, Eq)
 
+data TS = TS [Name] [Name] [Name] Type
+
 type AnnTy = (Type, RegVar)
-
-
 
 -- Target Triple
 data Term = Term Expr AnnTy Effect deriving (Show, Eq)

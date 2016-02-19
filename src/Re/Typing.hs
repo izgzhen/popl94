@@ -76,7 +76,17 @@ algoS a b = \case
                                                  eff0 `union`
                                                  eff1))
                                         `union` eff2)))
+    S.ELetrec f ts x e1 e2 -> do
+        let (tyvars, ty0) = canonicalize ts
+        let (S.TArrow tyx ty1) = ty0
+        (a0, ty0') <- freshType a ty0
+        let regvars = frv ty0'
+        let effvars = fev ty0'
+        let ts'  = T.TS tyvars regvars effvars ty0'
+        let ts'' = T.TS []     regvars effvars ty0'
+        reg <- freshRegVar a0
         
+
 
 
 -- Algorithm R
@@ -153,4 +163,10 @@ unifyMu = undefined
 retract :: (Substitution, Basis, Basis, Basis, Term) ->
            TE (Substitution, Basis, Basis, Term)
 retract = undefined
+
+freshType :: Basis -> S.Type -> TE (Basis, T.Type)
+freshType = undefined
+
+canonicalize :: S.TS -> ([Name], S.Type)
+canonicalize = undefined
 

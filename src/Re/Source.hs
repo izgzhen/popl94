@@ -2,8 +2,7 @@ module Re.Source where
 
 import Re.Common
 
-data Expr = EInt Int
-          | EVar Name [Type]
+data Expr = EVar Name [Type]
           | EAbs Name Type Expr
           | EApp Expr Expr
           | ELetrec Name TS Name Expr Expr
