@@ -17,7 +17,7 @@ type ArrEff = (EffVar, Effect)
 
 data Type = TInt
           | TVar Name
-          | AnnTy ArrEff AnnTy
+          | TArrow AnnTy ArrEff AnnTy
           deriving (Show, Eq)
 
 type AnnTy = (Type, RegVar)
@@ -35,7 +35,7 @@ data Expr = EVar Name
           | ELetreg Basis Term
           deriving (Show, Eq)
 
-data Basis = Basis (Set RegVar) (Set ArrEff) deriving (Show, Eq)
+type Basis = (Set RegVar, Set ArrEff)
 
 
 data InstList = InstList [Type] [RegVar] [ArrEff] deriving (Show, Eq)
