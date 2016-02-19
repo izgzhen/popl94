@@ -5,13 +5,13 @@ import qualified Re.Source as S
 
 import Data.Set (Set)
 
-newtype RegVar = RegVar Name deriving (Eq, Show)
+newtype RegVar = RegVar Name deriving (Eq, Ord, Show)
 
-newtype EffVar = EffVar Name deriving (Eq, Show)
+newtype EffVar = EffVar Name deriving (Eq, Ord, Show)
 
 type AtEff = Either RegVar EffVar
 
-newtype Effect = Effect (Set AtEff) deriving (Eq, Show)
+type Effect = Set AtEff
 
 type ArrEff = (EffVar, Effect)
 

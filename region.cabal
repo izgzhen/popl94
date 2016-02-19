@@ -15,7 +15,8 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Re.Source,
                        Re.Target,
-                       Re.Common
+                       Re.Common,
+                       Re.Typing
                        -- Source, Target, Translate, Common, Type, Unify
   -- other-modules:       
   default-extensions:  FlexibleContexts
