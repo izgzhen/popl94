@@ -14,3 +14,8 @@ unsafeLookup :: (Ord k, Show k) => k -> M.Map k v -> v
 unsafeLookup k m = case M.lookup k m of
     Just v -> v
     Nothing -> error $ "can't find " ++ show k
+
+unsafeLookup' :: (Ord k, Show k) => k -> M.Map k v -> String -> v
+unsafeLookup' k m msg = case M.lookup k m of
+    Just v -> v
+    Nothing -> error $ "can't find " ++ show k ++ ", " ++ msg

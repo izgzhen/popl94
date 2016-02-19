@@ -16,7 +16,7 @@ data Expr = EInt Int Place
           deriving (Eq)
 
 instance Show Expr where
-    show (EInt i p)     = show i ++ " at " ++ show p
+    show (EInt i p)     = "(" ++ show i ++ " at " ++ show p ++ ")"
     show (EVar x)       = x
     show (EAbs x e p)   = "(λ" ++ x ++ "." ++ show e ++ " at " ++ show p ++ ")"
     show (EApp e1 e2)   = "(" ++ show e1 ++ " " ++ show e2 ++ ")"
@@ -24,7 +24,7 @@ instance Show Expr where
     show (ELetrec f ps x p e1 e2) =
         "(letrec " ++ f ++ "[" ++ splitByComma (map show ps) ++ "]" ++ "(" ++ x ++ ")" ++
             " at " ++ show p ++ " = " ++ show e1 ++ " in " ++ show e2 ++ ")"
-    show (EFun f ps p)  = f ++ "[" ++ splitByComma (map show ps) ++ "]" ++ " at " ++ show p
+    show (EFun f ps p)  = "(" ++ f ++ "[" ++ splitByComma (map show ps) ++ "]" ++ " at " ++ show p ++ ")"
     show (ELetReg x e)  = "letregion " ++ x ++ " in " ++ show e
 
 

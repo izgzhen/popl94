@@ -70,7 +70,9 @@ instance Subst Type Type where
     substIn TInt _ = TInt
 
     substIn (TArrow decTy1 (evar, effs) decTy2) s =
-        let (evar', effs') = unsafeLookup evar (_effectSubst s)
+        let (evar', effs') = case M.lookup evar (_effectSubst s) of
+                Nothing  -> (evar, emptyEffects)
+                Just ret -> ret
         in  TArrow (decTy1 `substIn` s)
                    (evar', effs' `S.union` effs)
                    (decTy2 `substIn` s)
@@ -82,7 +84,9 @@ instance Subst Place Place where
             Nothing -> PVar x
 
 instance Subst EVar (EVar, Effects) where
-    substIn evar s = unsafeLookup evar (_effectSubst s)
+    substIn evar s = unsafeLookup' evar (_effectSubst s)
+                        $ "substIn evar(" ++ show evar ++
+                          ") s(" ++ show s ++ ") failed"
 
 instance Subst Effects Effects where
     substIn effs s = S.unions $ map (flip substIn s) $ S.toList effs

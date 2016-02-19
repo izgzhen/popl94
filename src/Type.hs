@@ -12,9 +12,17 @@ import Control.Lens
 data Effect = AEGet Place -- get(ρ)
             | AEPut Place -- put(ρ)
             | AEVar Name -- effect variable ε
-            deriving (Show, Ord, Eq)
+            deriving (Ord, Eq)
 
-newtype EVar = EVar { unEVar :: Name } deriving (Eq, Ord, Show)
+instance Show Effect where
+    show (AEGet p) = "get(" ++ show p ++ ")"
+    show (AEPut p) = "put(" ++ show p ++ ")"
+    show (AEVar x) = x
+
+newtype EVar = EVar { unEVar :: Name } deriving (Eq, Ord)
+
+instance Show EVar where
+    show (EVar x) = x
 
 type Effects = S.Set Effect
 
@@ -24,11 +32,15 @@ emptyEffects = S.empty
 data Type = TInt
           | TArrow DecoratedType (EVar, Effects) DecoratedType -- μ---ε.φ-->μ
           | TVar Name -- α
-          deriving (Show, Eq)
+          deriving (Eq, Show)
 
 data Place = PVar Name -- region variables
            | PReg Name -- region names
-           deriving (Show, Ord, Eq)
+           deriving (Ord, Eq)
+
+instance Show Place where
+    show (PVar x) = x
+    show (PReg x) = x
 
 type DecoratedType = (Type, Place)
 

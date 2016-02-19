@@ -29,16 +29,24 @@ makeLenses ''TEState
 
 initTEState :: TEState
 initTEState = TEState {
-  _tyDict     = M.empty
+  _tyDict     = M.singleton "add" decTyAdd
 , _tyCounter  = 0
 , _pCounter   = 0
 , _effCounter = 0
 }
 
+decTyAdd = (Right (CForallPlc "pi" (CForallPlc "pi2" (CForallPlc "po" (CTy innerTy)))), PReg "p_builtin_add")
+    where
+        innerTy = TArrow
+                    (TInt, PVar "pi")
+                    (EVar "_e", emptyEffects)
+                    (TArrow (TInt, PVar "pi2")
+                            (EVar "_e2", emptyEffects) (TInt, PVar "po"), PVar "po")
+
 type TE = ExceptT String (State TEState)
 
--- runTranslate :: S.Expr -> Either String T.Expr
-runTranslate expr = evalState (runExceptT (translate' expr))
+runTranslate :: S.Expr -> Either String (T.Expr, DecoratedType, Effects, Substitution)
+runTranslate expr = evalState (runExceptT (translate' expr)) initTEState
 
 -- TE ⊢ e ⇒ e′ : μ, ϕ
 -- in TE, e translates to e′, which has type and place μ and effect ϕ
@@ -85,7 +93,7 @@ translate (S.EAbs x expr) = do
     decTy1@(STy ty1, p1) <- (,) <$> (STy <$> newTyVar) <*> newPlaceVar
     (expr', decTy2, effs, subst) <- withSimpleType x decTy1 $ translate expr
     evar <- newEffVar
-    p <- newPlaceVar
+    p    <- newPlaceVar
     return ( T.EAbs x expr' p, ( TArrow (ty1 `substIn` subst, p1 `substIn` subst)
                                         (evar, effs) decTy2
                                , p)
