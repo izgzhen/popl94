@@ -9,7 +9,7 @@ import Re.Source (TS)
 import Re.Common
 
 import qualified Data.Map as M
-import Data.Set (empty, fromList, singleton)
+import Data.Set (empty, fromList, singleton, union)
 
 import Control.Monad.State
 import Control.Monad.Except
@@ -62,6 +62,21 @@ algoS a b = \case
                                            annTy1
                                  , reg)
                                  (singleton (Left reg)))
+    S.EApp e1 e2 -> do
+        (s1, a1, b1, t1@(Term e1 (T.TArrow annTy2 (e, eff0) annTy1, reg0) eff1))
+            <- algoS a b e1
+        (s2, a2, b2, t2@(Term e2 annTy2' eff2))
+            <- withSubst s1 $ algoS a1 b1 e2
+        let s3 = unifyMu (s2 `subst` annTy2) annTy2'
+        let s = s3 `compose` s2 `compose` s1
+        retract ( s, a2, s3 `subst` b2, s `subst` b
+                , Term (s3 `subst` (T.EApp (s2 `subst` t1) t2))
+                       (s3 `subst` (s2 `subst` annTy1))
+                       (s3 `subst` ((s2 `subst` (fromList [Right e, Left reg0] `union`
+                                                 eff0 `union`
+                                                 eff1))
+                                        `union` eff2)))
+        
 
 
 -- Algorithm R
@@ -105,6 +120,15 @@ instance Substituted Basis where
 instance Substituted T.AnnTy where
     subst = undefined
 
+instance Substituted Term where
+    subst = undefined
+
+instance Substituted Effect where
+    subst = undefined
+
+instance Substituted T.Expr where
+    subst = undefined
+
 fromTS :: TS -> T.Type
 fromTS = undefined
 
@@ -120,4 +144,13 @@ compose = undefined
 toSubst :: EffVar -> (EffVar, Effect) -> Substitution
 toSubst = undefined
 
+withSubst :: Substitution -> TE a -> TE a
+withSubst = undefined
+
+unifyMu :: T.AnnTy -> T.AnnTy -> Substitution
+unifyMu = undefined
+
+retract :: (Substitution, Basis, Basis, Basis, Term) ->
+           TE (Substitution, Basis, Basis, Term)
+retract = undefined
 
